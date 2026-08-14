@@ -48,7 +48,7 @@ from cartographer.task_executor import MultiprocessingExecutor
 from cartographer.toolhead import BacklashCompensatingToolhead
 
 if TYPE_CHECKING:
-    from cartographer.interfaces.printer import Macro, Toolhead
+    from cartographer.interfaces.printer import GCodeDispatch, Macro, Toolhead
     from cartographer.runtime.adapters import Adapters
 
 logger = logging.getLogger(__name__)
@@ -161,7 +161,7 @@ class PrinterCartographer:
         registrations.extend(self._create_scan_macro_registrations(probe, toolhead))
 
         # Touch-related macros
-        registrations.extend(self._create_touch_macro_registrations(probe, toolhead))
+        registrations.extend(self._create_touch_macro_registrations(probe, toolhead, adapters.gcode))
 
         # Axis twist compensation
         registrations.extend(self._create_axis_twist_compensation_registration(probe, toolhead, adapters))
@@ -268,7 +268,12 @@ class PrinterCartographer:
             )
         )
 
-    def _create_touch_macro_registrations(self, probe: Probe, toolhead: Toolhead) -> list[MacroRegistration]:
+    def _create_touch_macro_registrations(
+        self,
+        probe: Probe,
+        toolhead: Toolhead,
+        gcode: GCodeDispatch,
+    ) -> list[MacroRegistration]:
         """Create touch-related macro registrations."""
         return list(
             chain.from_iterable(
@@ -302,6 +307,9 @@ class PrinterCartographer:
                             home_position=self.config.bed_mesh.zero_reference_position,
                             travel_speed=self.config.general.travel_speed,
                             random_radius=self.config.touch.home_random_radius,
+                            gcode=gcode,
+                            wipe_extension=self.config.touch.wipe_extension,
+                            retry=self.config.touch.retry,
                         ),
                     ),
                 ]

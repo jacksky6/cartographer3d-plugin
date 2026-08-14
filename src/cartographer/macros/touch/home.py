@@ -9,9 +9,10 @@ from typing import TYPE_CHECKING, final
 from typing_extensions import override
 
 from cartographer.interfaces.configuration import TouchConfig
-from cartographer.interfaces.printer import Macro, MacroParams
+from cartographer.interfaces.printer import GCodeDispatch, Macro, MacroParams
 from cartographer.macros.fields import config_ref, param, parse
 from cartographer.macros.utils import force_home_z
+from cartographer.probe.touch_mode import TouchError
 
 if TYPE_CHECKING:
     from cartographer.interfaces.printer import Toolhead
@@ -48,6 +49,9 @@ class TouchHomeMacro(Macro):
         lift_speed: float,
         travel_speed: float,
         random_radius: float,
+        gcode: GCodeDispatch | None = None,
+        wipe_extension: str = "",
+        retry: int = 1,
     ) -> None:
         self._probe = probe
         self._toolhead = toolhead
@@ -55,6 +59,9 @@ class TouchHomeMacro(Macro):
         self._lift_speed = lift_speed
         self._travel_speed = travel_speed
         self._random_radius = random_radius
+        self._gcode = gcode
+        self._wipe_extension = wipe_extension.strip()
+        self._retry = retry
 
     @override
     def run(self, params: MacroParams) -> None:
@@ -67,20 +74,41 @@ class TouchHomeMacro(Macro):
         z_was_homed = self._toolhead.is_homed("z")
 
         with force_home_z(self._toolhead):
-            pos = self._toolhead.get_position()
-            self._toolhead.move(
-                z=pos.z + Z_HOP,
-                speed=self._lift_speed,
-            )
             home_x, home_y = self._get_homing_position(p.random_radius)
-            self._toolhead.move(
-                x=home_x,
-                y=home_y,
-                speed=self._travel_speed,
-            )
-            self._toolhead.wait_moves()
+            trigger_pos: float | None = None
+            for attempt in range(self._retry):
+                pos = self._toolhead.get_position()
+                self._toolhead.move(
+                    z=pos.z + Z_HOP,
+                    speed=self._lift_speed,
+                )
+                self._toolhead.move(
+                    x=home_x,
+                    y=home_y,
+                    speed=self._travel_speed,
+                )
+                self._toolhead.wait_moves()
 
-            trigger_pos = self._probe.perform_probe()
+                try:
+                    trigger_pos = self._probe.perform_probe()
+                    break
+                except TouchError:
+                    if attempt + 1 >= self._retry:
+                        raise
+                    if self._gcode is None or not self._wipe_extension:
+                        msg = "CARTOGRAPHER_TOUCH_HOME retry requested, but no wipe_extension is configured"
+                        raise RuntimeError(msg) from None
+                    logger.warning(
+                        "Touch home attempt %d/%d failed; running wipe extension '%s' before retry",
+                        attempt + 1,
+                        self._retry,
+                        self._wipe_extension,
+                    )
+                    self._gcode.run_gcode(self._wipe_extension)
+
+            if trigger_pos is None:
+                msg = "CARTOGRAPHER_TOUCH_HOME did not produce a trigger position"
+                raise RuntimeError(msg)
 
         self._toolhead.z_home_end(self._probe)
         pos = self._toolhead.get_position()

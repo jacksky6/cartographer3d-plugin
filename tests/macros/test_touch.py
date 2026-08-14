@@ -6,9 +6,9 @@ from typing import TYPE_CHECKING
 import pytest
 from typing_extensions import TypeAlias
 
-from cartographer.interfaces.printer import MacroParams, Position, Toolhead
+from cartographer.interfaces.printer import GCodeDispatch, MacroParams, Position, Toolhead
 from cartographer.macros.touch import TouchAccuracyMacro, TouchHomeMacro, TouchProbeMacro
-from cartographer.probe.touch_mode import TouchMode, TouchModeConfiguration
+from cartographer.probe.touch_mode import TouchError, TouchMode, TouchModeConfiguration
 
 if TYPE_CHECKING:
     from pytest import LogCaptureFixture
@@ -154,6 +154,85 @@ def test_touch_home_macro(
     macro.run(params)
 
     assert set_z_position_spy.mock_calls == [mocker.call(expected)]
+
+
+def test_touch_home_does_not_wipe_after_success(
+    mocker: MockerFixture,
+    probe: Probe,
+    toolhead: Toolhead,
+    params: MacroParams,
+):
+    gcode = mocker.Mock(spec=GCodeDispatch)
+    macro = TouchHomeMacro(
+        probe,
+        toolhead,
+        home_position=(10, 10),
+        lift_speed=5,
+        travel_speed=50,
+        random_radius=0,
+        gcode=gcode,
+        wipe_extension="WIPE_ONLY",
+        retry=3,
+    )
+    probe.perform_probe = mocker.Mock(return_value=0.1)
+
+    macro.run(params)
+
+    probe.perform_probe.assert_called_once_with()
+    gcode.run_gcode.assert_not_called()
+
+
+def test_touch_home_wipes_between_retries(
+    mocker: MockerFixture,
+    probe: Probe,
+    toolhead: Toolhead,
+    params: MacroParams,
+):
+    gcode = mocker.Mock(spec=GCodeDispatch)
+    macro = TouchHomeMacro(
+        probe,
+        toolhead,
+        home_position=(10, 10),
+        lift_speed=5,
+        travel_speed=50,
+        random_radius=0,
+        gcode=gcode,
+        wipe_extension="WIPE_ONLY",
+        retry=3,
+    )
+    probe.perform_probe = mocker.Mock(side_effect=[TouchError("noisy"), 0.1])
+
+    macro.run(params)
+
+    assert probe.perform_probe.call_count == 2
+    gcode.run_gcode.assert_called_once_with("WIPE_ONLY")
+
+
+def test_touch_home_wipes_at_most_retry_count_minus_one(
+    mocker: MockerFixture,
+    probe: Probe,
+    toolhead: Toolhead,
+    params: MacroParams,
+):
+    gcode = mocker.Mock(spec=GCodeDispatch)
+    macro = TouchHomeMacro(
+        probe,
+        toolhead,
+        home_position=(10, 10),
+        lift_speed=5,
+        travel_speed=50,
+        random_radius=0,
+        gcode=gcode,
+        wipe_extension="WIPE_ONLY",
+        retry=3,
+    )
+    probe.perform_probe = mocker.Mock(side_effect=TouchError("noisy"))
+
+    with pytest.raises(TouchError, match="noisy"):
+        macro.run(params)
+
+    assert probe.perform_probe.call_count == 3
+    assert gcode.run_gcode.call_count == 2
 
 
 def test_unhomed_touch_home_macro(
