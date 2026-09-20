@@ -280,15 +280,6 @@ class TouchMode(TouchModelSelectorMixin, ProbeMode, Endstop):
             msg = "Threshold must positive"
             raise RuntimeError(msg)
 
-        pos = self._toolhead.get_position()
-        if not self.boundaries.is_within(x=pos.x, y=pos.y):
-            msg = (
-                f"Position ({pos.x:.2f}, {pos.y:.2f}) is outside touch boundaries. "
-                f"Valid range: X=[{self.boundaries.min_x:.2f}, {self.boundaries.max_x:.2f}], "
-                f"Y=[{self.boundaries.min_y:.2f}, {self.boundaries.max_y:.2f}]"
-            )
-            raise RuntimeError(msg)
-
         nozzle_temperature = max(self._toolhead.get_extruder_temperature())
         max_temp = self._config.max_touch_temperature
         if nozzle_temperature > max_temp + MAX_TOUCH_TEMPERATURE_EPSILON:

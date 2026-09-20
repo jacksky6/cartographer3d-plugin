@@ -132,15 +132,9 @@ def test_abort_if_current_extruder_target_too_hot(mocker: MockerFixture, toolhea
         _ = probe.touch.home_start(print_time=0.0)
 
 
-def test_nozzle_outside_bounds(mocker: MockerFixture, toolhead: Toolhead, probe: Probe) -> None:
-    toolhead.get_position = mocker.Mock(return_value=Position(-10, 0, 1))
-
-    with pytest.raises(RuntimeError, match="outside .* boundaries"):
-        _ = probe.touch.home_start(0)
-
-
-def test_probe_outside_bounds(mocker: MockerFixture, toolhead: Toolhead, probe: Probe) -> None:
+def test_touch_can_start_outside_bed_mesh(mocker: MockerFixture, mcu: Mcu, toolhead: Toolhead, probe: Probe) -> None:
     toolhead.get_position = mocker.Mock(return_value=Position(295, 95, 1))
 
-    with pytest.raises(RuntimeError, match="outside .* boundaries"):
-        _ = probe.touch.home_start(0)
+    _ = probe.touch.home_start(0)
+
+    mcu.start_homing_touch.assert_called_once_with(0, 1000)
