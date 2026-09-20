@@ -58,11 +58,11 @@ def make_config(
         # Zero offsets
         ((0.0, 0.0), (100.0, 100.0), 0.0, 0.0, TouchBoundaries(min_x=0.0, max_x=100.0, min_y=0.0, max_y=100.0)),
         # Positive offsets
-        ((0.0, 0.0), (100.0, 100.0), 10.0, 5.0, TouchBoundaries(min_x=0.0, max_x=90.0, min_y=0.0, max_y=95.0)),
+        ((0.0, 0.0), (100.0, 100.0), 10.0, 5.0, TouchBoundaries(min_x=0.0, max_x=100.0, min_y=0.0, max_y=100.0)),
         # Negative offsets
-        ((0.0, 0.0), (100.0, 100.0), -10.0, -5.0, TouchBoundaries(min_x=10.0, max_x=100.0, min_y=5.0, max_y=100.0)),
+        ((0.0, 0.0), (100.0, 100.0), -10.0, -5.0, TouchBoundaries(min_x=0.0, max_x=100.0, min_y=0.0, max_y=100.0)),
         # Non-zero mesh_min
-        ((10.0, 20.0), (100.0, 100.0), 5.0, 10.0, TouchBoundaries(min_x=10.0, max_x=95.0, min_y=20.0, max_y=90.0)),
+        ((10.0, 20.0), (100.0, 100.0), 5.0, 10.0, TouchBoundaries(min_x=10.0, max_x=100.0, min_y=20.0, max_y=100.0)),
     ],
 )
 def test_from_config_bounds(

@@ -10,6 +10,9 @@ from typing_extensions import ParamSpec
 from cartographer.interfaces.errors import ProbeTriggerError
 
 if TYPE_CHECKING:
+    from configfile import ConfigWrapper
+    from klippy import Printer
+
     from cartographer.interfaces.printer import Position
 
 P = ParamSpec("P")
@@ -79,3 +82,10 @@ def reraise_from_klipper(
             raise RuntimeError(error_message) from e
 
     return wrapper
+
+
+def try_load_object(printer: Printer, config: ConfigWrapper, section: str) -> bool:
+    if not config.has_section(section):
+        return False
+    _ = printer.load_object(config, section)
+    return True

@@ -11,6 +11,7 @@ from typing_extensions import override
 from cartographer.interfaces.configuration import BedMeshConfig, MeshDirection, MeshPath, ScanConfig
 from cartographer.interfaces.printer import (
     AxisTwistCompensation,
+    GCodeDispatch,
     Macro,
     MacroParams,
     Position,
@@ -98,6 +99,7 @@ class BedMeshScanAllParams:
     """
 
     method: str = param("Calibration method", default="scan")
+    probe_method: str = param("Probe method (scan or touch)", default="scan")
     mesh_min: str | None = param("Minimum mesh coordinate (x,y)", default=None)
     mesh_max: str | None = param("Maximum mesh coordinate (x,y)", default=None)
     probe_count: str | None = param("Number of probe points (x,y)", default=None)
@@ -183,6 +185,7 @@ class BedMeshCalibrateMacro(Macro, SupportsFallbackMacro):
         axis_twist_compensation: AxisTwistCompensation | None,
         task_executor: TaskExecutor,
         config: BedMeshCalibrateConfiguration,
+        gcode: GCodeDispatch,
     ):
         self.probe = probe
         self.toolhead = toolhead
@@ -191,6 +194,7 @@ class BedMeshCalibrateMacro(Macro, SupportsFallbackMacro):
         self.config = config
         self.coordinate_transformer = CoordinateTransformer(probe.scan.offset)
         self.axis_twist_compensation = axis_twist_compensation
+        self.gcode = gcode
         self._fallback: Macro | None = None
 
     @override
@@ -200,6 +204,13 @@ class BedMeshCalibrateMacro(Macro, SupportsFallbackMacro):
     @override
     def run(self, params: MacroParams) -> None:
         """Main entry point for bed mesh calibration."""
+        probe_method = params.get("PROBE_METHOD", "scan").lower()
+        if probe_method == "touch":
+            return self._run_touch(params)
+        if probe_method != "scan":
+            msg = f"Invalid PROBE_METHOD '{probe_method}'; expected 'scan' or 'touch'"
+            raise RuntimeError(msg)
+
         # Handle fallback for non-scan methods
         method = params.get("METHOD", "scan")
         if method.lower() != "scan":
@@ -229,6 +240,15 @@ class BedMeshCalibrateMacro(Macro, SupportsFallbackMacro):
 
         # Apply mesh to adapter
         self.adapter.apply_mesh(positions, scan_params.profile)
+
+    def _run_touch(self, params: MacroParams) -> None:
+        if self._fallback is None:
+            msg = "Original BED_MESH_CALIBRATE command is not available"
+            raise RuntimeError(msg)
+
+        touch_params = self.gcode.clone_params(params, {"METHOD": "automatic"})
+        with self.probe.as_touch():
+            self._fallback.run(touch_params)
 
     def _apply_zero_reference_height(
         self, positions: list[Position], params: MeshScanParams, grid: MeshGrid

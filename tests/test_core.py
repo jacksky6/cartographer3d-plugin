@@ -20,6 +20,7 @@ def mock_adapters(config: Configuration):
     adapters.bed_mesh = Mock()
     adapters.task_executor = Mock()
     adapters.gcode = Mock()
+    adapters.probe_method_macros = []
 
     # Add other necessary mock configurations
     return adapters
@@ -68,6 +69,17 @@ class TestMacroRegistration:
 
         assert "BED_MESH_CALIBRATE" in registered_names
         assert "CARTOGRAPHER_BED_MESH_CALIBRATE" not in registered_names
+
+    def test_probe_method_macros_registered(self, mock_adapters: Adapters):
+        mock_adapters.probe_method_macros = [
+            "Z_TILT_ADJUST",
+            "QUAD_GANTRY_LEVEL",
+            "SCREWS_TILT_CALCULATE",
+        ]
+        cartographer = PrinterCartographer(mock_adapters)
+        registered_names = {reg.name for reg in cartographer.macros}
+
+        assert set(mock_adapters.probe_method_macros).issubset(registered_names)
 
     def test_legacy_macros_registered(self, mock_adapters: Adapters):
         """Verify legacy macro aliases are registered."""

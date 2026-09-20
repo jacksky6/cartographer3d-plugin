@@ -85,6 +85,8 @@ class Mcu(Protocol):
 
 
 class MacroParams(Protocol):
+    def get_command_parameters(self) -> dict[str, str]: ...
+
     @overload
     def get(self, name: str, default: str = ...) -> str: ...
     @overload
@@ -148,6 +150,8 @@ class GCodeDispatch(Protocol):
     def run_gcode(self, script: str) -> None:
         """Run the given gcode script."""
         ...
+
+    def clone_params(self, params: MacroParams, overrides: dict[str, str]) -> MacroParams: ...
 
 
 class AxisTwistCompensation(Protocol):

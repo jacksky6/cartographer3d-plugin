@@ -154,19 +154,12 @@ class TouchBoundaries:
     def from_config(config: TouchModeConfiguration) -> TouchBoundaries:
         mesh_min_x, mesh_min_y = config.mesh_min
         mesh_max_x, mesh_max_y = config.mesh_max
-        x_offset = config.x_offset
-        y_offset = config.y_offset
-
-        min_x = mesh_min_x - min(x_offset, 0)
-        min_y = mesh_min_y - min(y_offset, 0)
-        max_x = mesh_max_x - max(x_offset, 0)
-        max_y = mesh_max_y - max(y_offset, 0)
 
         return TouchBoundaries(
-            min_x=min_x,
-            max_x=max_x,
-            min_y=min_y,
-            max_y=max_y,
+            min_x=mesh_min_x,
+            max_x=mesh_max_x,
+            min_y=mesh_min_y,
+            max_y=mesh_max_y,
         )
 
 

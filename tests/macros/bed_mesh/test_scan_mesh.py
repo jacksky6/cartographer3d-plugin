@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, final
 
@@ -8,7 +9,7 @@ import pytest
 from typing_extensions import override
 
 from cartographer.interfaces.configuration import MeshPath
-from cartographer.interfaces.printer import Position, Sample, Toolhead
+from cartographer.interfaces.printer import GCodeDispatch, Position, Sample, Toolhead
 from cartographer.macros.bed_mesh.interfaces import BedMeshAdapter
 from cartographer.macros.bed_mesh.scan_mesh import BedMeshCalibrateConfiguration, BedMeshCalibrateMacro
 from tests.mocks.config import MockConfiguration, default_general_config
@@ -44,6 +45,17 @@ class MockProbe:
 
     def __init__(self, session: Session[Sample], offset: Position):
         self.scan = self.MockScan(offset, session)
+        self.touch = object()
+        self.current_mode = self.scan
+
+    @contextmanager
+    def as_touch(self):
+        previous_mode = self.current_mode
+        try:
+            self.current_mode = self.touch
+            yield
+        finally:
+            self.current_mode = previous_mode
 
 
 class MockBedMeshAdapter(BedMeshAdapter):
@@ -166,6 +178,7 @@ class TestBedMeshIntegration:
     @pytest.fixture
     def bed_mesh_macro(
         self,
+        mocker: MockerFixture,
         probe: Probe,
         toolhead: Toolhead,
         adapter: BedMeshAdapter,
@@ -173,9 +186,51 @@ class TestBedMeshIntegration:
     ):
         """Create a bed mesh macro with mocked dependencies."""
         task_executor = InlineTaskExecutor()
-        macro = BedMeshCalibrateMacro(probe, toolhead, adapter, None, task_executor, mesh_config)
+        gcode = mocker.Mock(spec=GCodeDispatch)
+        macro = BedMeshCalibrateMacro(probe, toolhead, adapter, None, task_executor, mesh_config, gcode)
 
         return macro
+
+    def test_touch_mesh_uses_native_automatic_method_without_changing_bounds(
+        self,
+        mocker: MockerFixture,
+        bed_mesh_macro: BedMeshCalibrateMacro,
+        params: MockParams,
+    ) -> None:
+        params.params = {"PROBE_METHOD": "touch", "PROFILE": "touch-profile"}
+        forwarded_params = mocker.Mock()
+        bed_mesh_macro.gcode.clone_params = mocker.Mock(return_value=forwarded_params)
+        fallback = mocker.Mock()
+
+        def assert_touch_mode(_params) -> None:
+            assert _params is forwarded_params
+            assert bed_mesh_macro.probe.current_mode is bed_mesh_macro.probe.touch
+
+        fallback.run.side_effect = assert_touch_mode
+        bed_mesh_macro.set_fallback_macro(fallback)
+
+        bed_mesh_macro.run(params)
+
+        bed_mesh_macro.gcode.clone_params.assert_called_once_with(params, {"METHOD": "automatic"})
+        fallback.run.assert_called_once_with(forwarded_params)
+        assert bed_mesh_macro.probe.current_mode is bed_mesh_macro.probe.scan
+
+    def test_touch_mesh_restores_scan_mode_after_failure(
+        self,
+        mocker: MockerFixture,
+        bed_mesh_macro: BedMeshCalibrateMacro,
+        params: MockParams,
+    ) -> None:
+        params.params = {"PROBE_METHOD": "touch"}
+        bed_mesh_macro.gcode.clone_params = mocker.Mock(return_value=mocker.Mock())
+        fallback = mocker.Mock()
+        fallback.run.side_effect = RuntimeError("probe failed")
+        bed_mesh_macro.set_fallback_macro(fallback)
+
+        with pytest.raises(RuntimeError, match="probe failed"):
+            bed_mesh_macro.run(params)
+
+        assert bed_mesh_macro.probe.current_mode is bed_mesh_macro.probe.scan
 
     def test_regular_mesh_boundary_and_coordinate_transformation(
         self,
