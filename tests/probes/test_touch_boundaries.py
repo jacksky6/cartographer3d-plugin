@@ -1,8 +1,15 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import pytest
 
-from cartographer.probe.touch_mode import TouchBoundaries, TouchModeConfiguration
+from cartographer.probe.touch_mode import TouchBoundaries
+
+if TYPE_CHECKING:
+    from pytest_mock import MockerFixture
+
+    from cartographer.interfaces.printer import Toolhead
 
 BOUNDS = TouchBoundaries(min_x=10.0, max_x=20.0, min_y=5.0, max_y=15.0)
 
@@ -30,48 +37,25 @@ def test_is_within_bounds(x: float, y: float, expected: bool) -> None:
     assert BOUNDS.is_within(x=x, y=y) is expected
 
 
-def make_config(
-    mesh_min: tuple[float, float],
-    mesh_max: tuple[float, float],
-    x_offset: float,
-    y_offset: float,
-) -> TouchModeConfiguration:
-    return TouchModeConfiguration(
-        samples=1,
-        max_samples=1,
-        max_window=1,
-        mesh_min=mesh_min,
-        mesh_max=mesh_max,
-        max_touch_temperature=150,
-        x_offset=x_offset,
-        y_offset=y_offset,
-        lift_speed=5,
-        retract_distance=2.0,
-        models={},
-        sample_range=0.010,
-    )
-
-
 @pytest.mark.parametrize(
-    "mesh_min, mesh_max, x_offset, y_offset, expected",
+    "x_limits, y_limits, x_offset, y_offset, expected",
     [
-        # Zero offsets
-        ((0.0, 0.0), (100.0, 100.0), 0.0, 0.0, TouchBoundaries(min_x=0.0, max_x=100.0, min_y=0.0, max_y=100.0)),
-        # Positive offsets
-        ((0.0, 0.0), (100.0, 100.0), 10.0, 5.0, TouchBoundaries(min_x=0.0, max_x=100.0, min_y=0.0, max_y=100.0)),
-        # Negative offsets
-        ((0.0, 0.0), (100.0, 100.0), -10.0, -5.0, TouchBoundaries(min_x=0.0, max_x=100.0, min_y=0.0, max_y=100.0)),
-        # Non-zero mesh_min
-        ((10.0, 20.0), (100.0, 100.0), 5.0, 10.0, TouchBoundaries(min_x=10.0, max_x=100.0, min_y=20.0, max_y=100.0)),
+        ((0.0, 302.0), (0.0, 307.0), 0.0, 21.0, TouchBoundaries(5.0, 297.0, 5.0, 281.0)),
+        ((0.0, 100.0), (0.0, 100.0), -10.0, -5.0, TouchBoundaries(15.0, 95.0, 10.0, 95.0)),
+        ((-5.0, 105.0), (-10.0, 110.0), 0.0, 0.0, TouchBoundaries(0.0, 100.0, -5.0, 105.0)),
     ],
 )
-def test_from_config_bounds(
-    mesh_min: tuple[float, float],
-    mesh_max: tuple[float, float],
+def test_from_toolhead_bounds(
+    mocker: MockerFixture,
+    toolhead: Toolhead,
+    x_limits: tuple[float, float],
+    y_limits: tuple[float, float],
     x_offset: float,
     y_offset: float,
     expected: TouchBoundaries,
 ) -> None:
-    config = make_config(mesh_min, mesh_max, x_offset, y_offset)
-    bounds = TouchBoundaries.from_config(config)
+    toolhead.get_axis_limits = mocker.Mock(side_effect=lambda axis: x_limits if axis == "x" else y_limits)
+
+    bounds = TouchBoundaries.from_toolhead(toolhead, x_offset=x_offset, y_offset=y_offset)
+
     assert bounds == expected

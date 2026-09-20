@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 
 TOUCH_ACCEL = 100
 MAX_TOUCH_TEMPERATURE_EPSILON = 2
+TOUCH_BOUNDARY_MARGIN = 5.0
 
 
 @dataclass(frozen=True)
@@ -42,8 +43,6 @@ class TouchModeConfiguration:
 
     x_offset: float
     y_offset: float
-    mesh_min: tuple[float, float]
-    mesh_max: tuple[float, float]
     max_touch_temperature: int
     lift_speed: float
 
@@ -60,8 +59,6 @@ class TouchModeConfiguration:
             models=config.touch.models,
             x_offset=config.general.x_offset,
             y_offset=config.general.y_offset,
-            mesh_min=config.bed_mesh.mesh_min,
-            mesh_max=config.bed_mesh.mesh_max,
             max_touch_temperature=config.touch.max_touch_temperature,
             lift_speed=config.general.lift_speed,
             retract_distance=config.touch.retract_distance,
@@ -151,15 +148,21 @@ class TouchBoundaries:
         return in_x_bounds and in_y_bounds
 
     @staticmethod
-    def from_config(config: TouchModeConfiguration) -> TouchBoundaries:
-        mesh_min_x, mesh_min_y = config.mesh_min
-        mesh_max_x, mesh_max_y = config.mesh_max
+    def from_toolhead(
+        toolhead: Toolhead,
+        *,
+        x_offset: float,
+        y_offset: float,
+        margin: float = TOUCH_BOUNDARY_MARGIN,
+    ) -> TouchBoundaries:
+        x_min, x_max = toolhead.get_axis_limits("x")
+        y_min, y_max = toolhead.get_axis_limits("y")
 
         return TouchBoundaries(
-            min_x=mesh_min_x,
-            max_x=mesh_max_x,
-            min_y=mesh_min_y,
-            max_y=mesh_max_y,
+            min_x=x_min + margin - min(x_offset, 0),
+            max_x=x_max - margin - max(x_offset, 0),
+            min_y=y_min + margin - min(y_offset, 0),
+            max_y=y_max - margin - max(y_offset, 0),
         )
 
 
@@ -213,7 +216,11 @@ class TouchMode(TouchModelSelectorMixin, ProbeMode, Endstop):
         self._mcu: Mcu = mcu
         self._config: TouchModeConfiguration = config
 
-        self.boundaries: TouchBoundaries = TouchBoundaries.from_config(config)
+        self.boundaries: TouchBoundaries = TouchBoundaries.from_toolhead(
+            toolhead,
+            x_offset=config.x_offset,
+            y_offset=config.y_offset,
+        )
         self.last_z_result: float | None = None
 
     @override
@@ -278,6 +285,15 @@ class TouchMode(TouchModelSelectorMixin, ProbeMode, Endstop):
         model = self.get_model()
         if model.threshold <= 0:
             msg = "Threshold must positive"
+            raise RuntimeError(msg)
+
+        position = self._toolhead.get_position()
+        if not self.boundaries.is_within(x=position.x, y=position.y):
+            msg = (
+                f"Position ({position.x:.2f}, {position.y:.2f}) is outside touch boundaries. "
+                f"Valid range: X=[{self.boundaries.min_x:.2f}, {self.boundaries.max_x:.2f}], "
+                f"Y=[{self.boundaries.min_y:.2f}, {self.boundaries.max_y:.2f}]"
+            )
             raise RuntimeError(msg)
 
         nozzle_temperature = max(self._toolhead.get_extruder_temperature())

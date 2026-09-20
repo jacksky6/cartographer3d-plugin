@@ -17,6 +17,7 @@ def mock_adapters(config: Configuration):
     adapters.config = config
     adapters.axis_twist_compensation = None
     adapters.toolhead = Mock()
+    adapters.toolhead.get_axis_limits.return_value = (0, 100)
     adapters.bed_mesh = Mock()
     adapters.task_executor = Mock()
     adapters.gcode = Mock()
