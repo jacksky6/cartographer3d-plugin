@@ -32,7 +32,7 @@ test = [
 lint = ["ruff~=0.14"]
 typecheck = [
   "basedpyright~=1.27",
-  "hatchling~=1.27",
+  "hatchling>=1.27,<1.32",
   "scipy-stubs~=1.15 ; python_version~='3.10'",
 ]
 dev = ["numpy~=1.16"]
@@ -72,7 +72,7 @@ packages = ["src/cartographer"]
 [tool.hatch.build.targets.wheel.hooks.custom]
 
 [build-system]
-requires = ["hatchling", "hatch-vcs", "typing-extensions"]
+requires = ["hatchling>=1.27,<1.32", "hatch-vcs", "typing-extensions"]
 build-backend = "hatchling.build"
 
 [tool.hatch.envs.hatch-static-analysis]
