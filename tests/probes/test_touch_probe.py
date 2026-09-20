@@ -160,7 +160,8 @@ def test_abort_if_current_extruder_target_too_hot(mocker: MockerFixture, toolhea
 
 
 def test_touch_can_start_outside_bed_mesh(mocker: MockerFixture, mcu: Mcu, toolhead: Toolhead, probe: Probe) -> None:
-    probe.touch.boundaries = probe.touch.boundaries.__class__(5, 295, 5, 295)
+    toolhead.get_axis_limits = mocker.Mock(return_value=(0, 300))
+    probe.touch.initialize_boundaries()
     toolhead.get_position = mocker.Mock(return_value=Position(250, 95, 1))
 
     _ = probe.touch.home_start(0)

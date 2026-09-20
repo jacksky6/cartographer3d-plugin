@@ -106,7 +106,9 @@ def scan(
 
 @pytest.fixture
 def touch(mcu: Mcu, toolhead: Toolhead, config: Configuration):
-    return TouchMode(mcu, toolhead, TouchModeConfiguration.from_config(config))
+    mode = TouchMode(mcu, toolhead, TouchModeConfiguration.from_config(config))
+    mode.initialize_boundaries()
+    return mode
 
 
 @pytest.fixture

@@ -511,6 +511,7 @@ class CalibrationTouchMode(TouchMode):
             toolhead,
             replace(config, models={"calibration": model}),
         )
+        self.initialize_boundaries()
         self.load_model("calibration")
 
     def set_threshold(self, threshold: int) -> None:

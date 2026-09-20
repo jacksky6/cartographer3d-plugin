@@ -191,6 +191,13 @@ class TouchMode(TouchModelSelectorMixin, ProbeMode, Endstop):
     """Implementation for Survey Touch."""
 
     @property
+    def boundaries(self) -> TouchBoundaries:
+        if self._boundaries is None:
+            msg = "Touch boundaries are not initialized"
+            raise RuntimeError(msg)
+        return self._boundaries
+
+    @property
     @override
     def offset(self) -> Position:
         return Position(0.0, 0.0, 0.0)
@@ -217,12 +224,15 @@ class TouchMode(TouchModelSelectorMixin, ProbeMode, Endstop):
         self._mcu: Mcu = mcu
         self._config: TouchModeConfiguration = config
 
-        self.boundaries: TouchBoundaries = TouchBoundaries.from_toolhead(
-            toolhead,
-            x_offset=config.x_offset,
-            y_offset=config.y_offset,
-        )
+        self._boundaries: TouchBoundaries | None = None
         self.last_z_result: float | None = None
+
+    def initialize_boundaries(self) -> None:
+        self._boundaries = TouchBoundaries.from_toolhead(
+            self._toolhead,
+            x_offset=self._config.x_offset,
+            y_offset=self._config.y_offset,
+        )
 
     @override
     def get_status(self, eventtime: float) -> dict[str, object]:

@@ -17,7 +17,6 @@ def mock_adapters(config: Configuration):
     adapters.config = config
     adapters.axis_twist_compensation = None
     adapters.toolhead = Mock()
-    adapters.toolhead.get_axis_limits.return_value = (0, 100)
     adapters.bed_mesh = Mock()
     adapters.task_executor = Mock()
     adapters.gcode = Mock()
@@ -29,6 +28,19 @@ def mock_adapters(config: Configuration):
 
 class TestMacroRegistration:
     """Test that all expected macros are registered correctly."""
+
+    def test_touch_boundaries_initialized_when_ready(self, mock_adapters: Adapters):
+        mock_adapters.toolhead.get_axis_limits.return_value = (0, 100)
+        cartographer = PrinterCartographer(mock_adapters)
+        cartographer.validate_and_load_models = Mock()
+
+        mock_adapters.toolhead.get_axis_limits.assert_not_called()
+
+        cartographer.ready_callback()
+
+        assert mock_adapters.toolhead.get_axis_limits.call_count == 2
+        assert cartographer.touch_mode.boundaries.min_x == 5
+        cartographer.validate_and_load_models.assert_called_once_with()
 
     def test_core_probe_macros_registered(self, mock_adapters: Adapters):
         """Verify all core probe macros are registered."""

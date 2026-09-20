@@ -86,6 +86,7 @@ class PrinterCartographer:
         self.macros = self._create_macro_registrations(self.probe, toolhead, adapters)
 
     def ready_callback(self) -> None:
+        self.touch_mode.initialize_boundaries()
         self.validate_and_load_models()
 
     def validate_and_load_models(self) -> None:
