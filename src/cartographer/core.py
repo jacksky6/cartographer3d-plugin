@@ -172,7 +172,16 @@ class PrinterCartographer:
 
         registrations.extend(
             chain.from_iterable(
-                self._register_macro(name, ProbeMethodWrapperMacro(probe), use_prefix=False)
+                self._register_macro(
+                    name,
+                    ProbeMethodWrapperMacro(
+                        probe,
+                        gcode=adapters.gcode,
+                        wipe_extension=self.config.touch.wipe_extension,
+                        retry=self.config.touch.retry,
+                    ),
+                    use_prefix=False,
+                )
                 for name in adapters.probe_method_macros
             )
         )
@@ -225,6 +234,8 @@ class PrinterCartographer:
                             self.task_executor,
                             BedMeshCalibrateConfiguration.from_config(self.config),
                             adapters.gcode,
+                            wipe_extension=self.config.touch.wipe_extension,
+                            retry=self.config.touch.retry,
                         ),
                         use_prefix=False,
                     ),

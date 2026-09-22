@@ -204,11 +204,11 @@ class TouchConfig:
     retract_distance: float = option("Retract distance (in mm) between touch samples.", default=2.0, min=1.0)
     sample_range: float = option("Acceptable range (in mm) between touch samples.", default=0.010, min=0.001, max=0.015)
     wipe_extension: str = option(
-        "G-code macro to run between CARTOGRAPHER_TOUCH_HOME retries.",
+        "G-code macro to run between Touch retries.",
         default="",
     )
     retry: int = option(
-        "Number of CARTOGRAPHER_TOUCH_HOME attempts, including the initial attempt.",
+        "Number of Touch attempts, including the initial attempt.",
         default=1,
         min=1,
     )

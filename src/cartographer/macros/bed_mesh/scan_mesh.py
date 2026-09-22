@@ -34,6 +34,7 @@ from cartographer.macros.bed_mesh.paths.random_path import RandomPathGenerator
 from cartographer.macros.bed_mesh.paths.snake_path import SnakePathGenerator
 from cartographer.macros.bed_mesh.paths.spiral_path import SpiralPathGenerator
 from cartographer.macros.fields import config_ref, param
+from cartographer.macros.touch.retry import run_with_retries
 from cartographer.macros.utils import get_choice, get_float_tuple, get_int_tuple
 
 if TYPE_CHECKING:
@@ -186,6 +187,9 @@ class BedMeshCalibrateMacro(Macro, SupportsFallbackMacro):
         task_executor: TaskExecutor,
         config: BedMeshCalibrateConfiguration,
         gcode: GCodeDispatch,
+        *,
+        wipe_extension: str = "",
+        retry: int = 1,
     ):
         self.probe = probe
         self.toolhead = toolhead
@@ -195,6 +199,8 @@ class BedMeshCalibrateMacro(Macro, SupportsFallbackMacro):
         self.coordinate_transformer = CoordinateTransformer(probe.scan.offset)
         self.axis_twist_compensation = axis_twist_compensation
         self.gcode = gcode
+        self._wipe_extension = wipe_extension.strip()
+        self._retry = retry
         self._fallback: Macro | None = None
 
     @override
@@ -247,8 +253,18 @@ class BedMeshCalibrateMacro(Macro, SupportsFallbackMacro):
             raise RuntimeError(msg)
 
         touch_params = self.gcode.clone_params(params, {"METHOD": "automatic"})
-        with self.probe.as_touch():
-            self._fallback.run(touch_params)
+
+        def run_mesh() -> None:
+            with self.probe.as_touch():
+                self._fallback.run(touch_params)
+
+        run_with_retries(
+            run_mesh,
+            gcode=self.gcode,
+            wipe_extension=self._wipe_extension,
+            retry=self._retry,
+            operation_name="Touch bed mesh",
+        )
 
     def _apply_zero_reference_height(
         self, positions: list[Position], params: MeshScanParams, grid: MeshGrid

@@ -12,6 +12,7 @@ from cartographer.interfaces.configuration import MeshPath
 from cartographer.interfaces.printer import GCodeDispatch, Position, Sample, Toolhead
 from cartographer.macros.bed_mesh.interfaces import BedMeshAdapter
 from cartographer.macros.bed_mesh.scan_mesh import BedMeshCalibrateConfiguration, BedMeshCalibrateMacro
+from cartographer.probe.touch_mode import TouchError
 from tests.mocks.config import MockConfiguration, default_general_config
 from tests.mocks.task_executor import InlineTaskExecutor
 from tests.mocks.toolhead import MockToolhead
@@ -231,6 +232,26 @@ class TestBedMeshIntegration:
             bed_mesh_macro.run(params)
 
         assert bed_mesh_macro.probe.current_mode is bed_mesh_macro.probe.scan
+
+    def test_touch_mesh_wipes_and_retries_after_noisy_samples(
+        self,
+        mocker: MockerFixture,
+        bed_mesh_macro: BedMeshCalibrateMacro,
+        params: MockParams,
+    ) -> None:
+        params.params = {"PROBE_METHOD": "touch"}
+        forwarded_params = mocker.Mock()
+        bed_mesh_macro.gcode.clone_params = mocker.Mock(return_value=forwarded_params)
+        bed_mesh_macro._wipe_extension = "WIPE_ONLY"
+        bed_mesh_macro._retry = 3
+        fallback = mocker.Mock()
+        fallback.run.side_effect = [TouchError("noisy"), None]
+        bed_mesh_macro.set_fallback_macro(fallback)
+
+        bed_mesh_macro.run(params)
+
+        assert fallback.run.call_count == 2
+        bed_mesh_macro.gcode.run_gcode.assert_called_once_with("WIPE_ONLY")
 
     def test_regular_mesh_boundary_and_coordinate_transformation(
         self,

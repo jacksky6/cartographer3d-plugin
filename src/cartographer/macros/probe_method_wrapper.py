@@ -5,8 +5,10 @@ from typing import TYPE_CHECKING, final
 from typing_extensions import override
 
 from cartographer.interfaces.printer import Macro, MacroParams
+from cartographer.macros.touch.retry import run_with_retries
 
 if TYPE_CHECKING:
+    from cartographer.interfaces.printer import GCodeDispatch
     from cartographer.probe import Probe
 
 
@@ -14,9 +16,19 @@ if TYPE_CHECKING:
 class ProbeMethodWrapperMacro(Macro):
     description = "Run a probing command using scan or touch mode."
 
-    def __init__(self, probe: Probe) -> None:
+    def __init__(
+        self,
+        probe: Probe,
+        *,
+        gcode: GCodeDispatch | None = None,
+        wipe_extension: str = "",
+        retry: int = 1,
+    ) -> None:
         self._probe = probe
         self._fallback: Macro | None = None
+        self._gcode = gcode
+        self._wipe_extension = wipe_extension.strip()
+        self._retry = retry
 
     def set_fallback_macro(self, macro: Macro) -> None:
         self._fallback = macro
@@ -35,5 +47,14 @@ class ProbeMethodWrapperMacro(Macro):
             msg = f"Invalid PROBE_METHOD '{probe_method}'; expected 'scan' or 'touch'"
             raise RuntimeError(msg)
 
-        with self._probe.as_touch():
-            self._fallback.run(params)
+        def run_probe() -> None:
+            with self._probe.as_touch():
+                self._fallback.run(params)
+
+        run_with_retries(
+            run_probe,
+            gcode=self._gcode,
+            wipe_extension=self._wipe_extension,
+            retry=self._retry,
+            operation_name="Touch probing command",
+        )
