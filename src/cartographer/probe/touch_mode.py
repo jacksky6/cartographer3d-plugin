@@ -132,6 +132,22 @@ def run_probe_sequence(
         f"{sample_range:.3f}mm in a window of {max_window:d} "
         f"after {max_samples:d} touches"
     )
+    final_window = collected[-max_window:]
+    best = find_best_subset(final_window, samples)
+    if best is None:
+        msg += f"; samples=[{', '.join(f'{value:.4f}' for value in collected)}]"
+    else:
+        best_range = compute_range(best)
+        msg += (
+            f"; samples=[{', '.join(f'{value:.4f}' for value in collected)}]"
+            f"; window=[{', '.join(f'{value:.4f}' for value in final_window)}]"
+            f"; best=[{', '.join(f'{value:.4f}' for value in best)}]"
+            f" range={best_range:.4f}mm"
+            f" min={min(best):.4f}mm"
+            f" max={max(best):.4f}mm"
+            f" mean={float(np.mean(best)):.4f}mm"
+            f" median={float(np.median(best)):.4f}mm"
+        )
     raise TouchError(msg)
 
 

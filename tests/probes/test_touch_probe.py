@@ -6,6 +6,7 @@ import pytest
 
 from cartographer.interfaces.configuration import Configuration, TouchModelConfiguration
 from cartographer.interfaces.printer import Mcu, Position, TemperatureStatus, Toolhead
+from cartographer.probe.touch_mode import run_probe_sequence
 
 if TYPE_CHECKING:
     from pytest_mock import MockerFixture
@@ -85,6 +86,23 @@ def test_probe_suceeds_on_more(mocker: MockerFixture, toolhead: Toolhead, probe:
     toolhead.get_position = mocker.Mock(return_value=Position(0, 0, 1))
 
     assert probe.touch.perform_probe() == 0.5
+
+
+def test_probe_failure_reports_sample_statistics() -> None:
+    samples = iter([1.0000, 1.0200, 1.0400, 1.0300, 1.0500, 1.0800])
+
+    with pytest.raises(RuntimeError, match=(
+        r"samples=\[1\.0000, 1\.0200, 1\.0400, 1\.0300, 1\.0500, 1\.0800\].*"
+        r"best=\[1\.0200, 1\.0400, 1\.0300\] range=0\.0200mm.*"
+        r"mean=1\.0300mm median=1\.0300mm"
+    )):
+        run_probe_sequence(
+            lambda: next(samples),
+            samples=3,
+            max_samples=6,
+            max_window=5,
+            sample_range=0.010,
+        )
 
 
 def test_probe_spread_samples_rejected_by_window(mocker: MockerFixture, toolhead: Toolhead, probe: Probe) -> None:
