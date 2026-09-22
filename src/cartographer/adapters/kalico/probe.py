@@ -3,9 +3,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, final
 
 from cartographer.adapters.klipper_like.utils import make_coord, reraise_for_klipper
+from cartographer.macros.touch.retry import run_with_retries
 
 if TYPE_CHECKING:
-    from gcode import GCodeCommand
+    from gcode import GCodeCommand, GCodeDispatch
 
     from cartographer.interfaces.configuration import GeneralConfig
     from cartographer.interfaces.printer import Toolhead
@@ -22,11 +23,17 @@ class KalicoCartographerProbe:
         probe_macro: ProbeMacro,
         query_probe_macro: QueryProbeMacro,
         config: GeneralConfig,
+        gcode: GCodeDispatch,
+        wipe_extension: str,
+        retry: int,
     ) -> None:
         self.probe = probe
         self.probe_macro = probe_macro
         self.query_probe_macro = query_probe_macro
         self.toolhead = toolhead
+        self.gcode = gcode
+        self.wipe_extension = wipe_extension.strip()
+        self.retry = retry
 
         self.lift_speed = config.lift_speed
         self.sample_count = 1
@@ -54,7 +61,22 @@ class KalicoCartographerProbe:
     def run_probe(self, gcmd: GCodeCommand, *args: object, **kwargs: object) -> list[float]:
         del gcmd, args, kwargs
         pos = self.toolhead.get_position()
-        trigger_pos = self.probe.current_mode.perform_probe()
+        trigger_pos: float | None = None
+
+        def perform_probe() -> None:
+            nonlocal trigger_pos
+            trigger_pos = self.probe.current_mode.perform_probe()
+
+        run_with_retries(
+            perform_probe,
+            gcode=self.gcode,
+            wipe_extension=self.wipe_extension,
+            retry=self.retry,
+            operation_name="Touch probe point",
+        )
+        if trigger_pos is None:
+            msg = "Touch probe point did not produce a result"
+            raise RuntimeError(msg)
         return [pos.x, pos.y, trigger_pos]
 
     def multi_probe_begin(self):

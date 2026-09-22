@@ -5,9 +5,10 @@ from typing import TYPE_CHECKING, final
 from extras import manual_probe
 
 from cartographer.adapters.klipper_like.utils import make_coord, reraise_for_klipper
+from cartographer.macros.touch.retry import run_with_retries
 
 if TYPE_CHECKING:
-    from gcode import GCodeCommand
+    from gcode import GCodeCommand, GCodeDispatch
 
     from cartographer.interfaces.configuration import GeneralConfig
     from cartographer.interfaces.printer import ProbeMode, Toolhead
@@ -16,8 +17,19 @@ if TYPE_CHECKING:
 
 
 class KlipperProbeSession:
-    def __init__(self, probe: ProbeMode, toolhead: Toolhead) -> None:
+    def __init__(
+        self,
+        probe: ProbeMode,
+        toolhead: Toolhead,
+        *,
+        gcode: GCodeDispatch,
+        wipe_extension: str,
+        retry: int,
+    ) -> None:
         self._probe: ProbeMode = probe
+        self._gcode = gcode
+        self._wipe_extension = wipe_extension
+        self._retry = retry
         self._results: list[list[float]] = []
         self.toolhead: Toolhead = toolhead
 
@@ -25,7 +37,22 @@ class KlipperProbeSession:
     def run_probe(self, gcmd: GCodeCommand) -> None:
         del gcmd
         pos = self.toolhead.get_position()
-        trigger_pos = self._probe.perform_probe()
+        trigger_pos: float | None = None
+
+        def perform_probe() -> None:
+            nonlocal trigger_pos
+            trigger_pos = self._probe.perform_probe()
+
+        run_with_retries(
+            perform_probe,
+            gcode=self._gcode,
+            wipe_extension=self._wipe_extension,
+            retry=self._retry,
+            operation_name="Touch probe point",
+        )
+        if trigger_pos is None:
+            msg = "Touch probe point did not produce a result"
+            raise RuntimeError(msg)
         self._results.append([pos.x, pos.y, trigger_pos])
 
     def pull_probed_results(self):
@@ -66,11 +93,17 @@ class KlipperCartographerProbe:
         probe_macro: ProbeMacro,
         query_probe_macro: QueryProbeMacro,
         config: GeneralConfig,
+        gcode: GCodeDispatch,
+        wipe_extension: str,
+        retry: int,
     ) -> None:
         self.probe = probe
         self.probe_macro = probe_macro
         self.query_probe_macro = query_probe_macro
         self.toolhead = toolhead
+        self.gcode = gcode
+        self.wipe_extension = wipe_extension.strip()
+        self.retry = retry
         self.lift_speed = config.lift_speed
 
     def _get_lift_speed(self, gcmd: GCodeCommand | None = None):
@@ -104,4 +137,10 @@ class KlipperCartographerProbe:
 
     def start_probe_session(self, gcmd: GCodeCommand) -> KlipperProbeSession:
         del gcmd
-        return KlipperProbeSession(self.probe.current_mode, self.toolhead)
+        return KlipperProbeSession(
+            self.probe.current_mode,
+            self.toolhead,
+            gcode=self.gcode,
+            wipe_extension=self.wipe_extension,
+            retry=self.retry,
+        )

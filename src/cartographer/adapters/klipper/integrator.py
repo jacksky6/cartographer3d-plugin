@@ -33,5 +33,8 @@ class KlipperIntegrator(KlipperLikeIntegrator):
                 cartographer.probe_macro,
                 cartographer.query_probe_macro,
                 cartographer.config.general,
+                self._gcode,
+                cartographer.config.touch.wipe_extension,
+                cartographer.config.touch.retry,
             ),
         )
